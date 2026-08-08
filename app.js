@@ -1,4 +1,13 @@
-const TASK_STORAGE_KEY = "quanda-calendar-tasks-v2";
+import {
+  categoryForIndex,
+  readCalendarTasks,
+  readCompletion,
+  removeRoadmapCalendarTasks,
+  syncRoadmapCalendarTasks,
+  taskCategories,
+  writeCalendarTasks,
+  writeCompletion,
+} from "./calendar.js";
 
 const copy = {
   en: {
@@ -24,6 +33,8 @@ const copy = {
     today: "Today", deadlineLegend: "Task deadline", dayPlan: "Day plan", taskLabel: "Task", addCalendar: "Add to calendar",
     emptyTasks: "No tasks yet. Add a small, concrete next step above.", clearDay: "A clear day — add something when you are ready.",
     complete: "complete", of: "of", taskPlaceholder: "What needs to get done?",
+    completed: "Completed", calendarAria: "Project calendar", calendarControls: "Calendar controls",
+    previousMonth: "Previous month", nextMonth: "Next month", deleteTask: "Delete task", taskSingular: "task", taskPlural: "tasks",
     briefPlaceholder: "For example: I need to create a 20-second product animation for a university assignment. The final output should be a 1080p MP4 with simple sound.",
     experiencePlaceholder: "Photoshop: intermediate; Blender: beginner",
     roadmapEyebrow: "Your production path", roadmapTitle: "Focused production roadmap",
@@ -60,6 +71,8 @@ const copy = {
     today: "Hôm nay", deadlineLegend: "Hạn công việc", dayPlan: "Kế hoạch trong ngày", taskLabel: "Công việc", addCalendar: "Thêm vào lịch",
     emptyTasks: "Chưa có công việc. Hãy thêm một bước nhỏ và cụ thể ở trên.", clearDay: "Hôm nay còn trống — thêm việc khi bạn sẵn sàng.",
     complete: "hoàn thành", of: "trên", taskPlaceholder: "Bạn cần hoàn thành việc gì?",
+    completed: "Đã hoàn thành", calendarAria: "Lịch dự án", calendarControls: "Điều khiển lịch",
+    previousMonth: "Tháng trước", nextMonth: "Tháng sau", deleteTask: "Xóa công việc", taskSingular: "công việc", taskPlural: "công việc",
     briefPlaceholder: "Ví dụ: Tôi cần làm video hoạt hình sản phẩm dài 20 giây cho bài tập đại học. Sản phẩm cuối là MP4 1080p có âm thanh đơn giản.",
     experiencePlaceholder: "Photoshop: trung cấp; Blender: mới bắt đầu",
     roadmapEyebrow: "Lộ trình sản xuất của bạn", roadmapTitle: "Lộ trình sản xuất tập trung",
@@ -110,15 +123,16 @@ const tutorialsByStage = [
   [],
 ];
 
-const taskCategories = ["sage", "peach", "lavender", "sky", "butter"];
-
 let currentLanguage = "en";
 const today = new Date();
 today.setHours(12, 0, 0, 0);
 let visibleMonth = new Date(today.getFullYear(), today.getMonth(), 1, 12);
 let selectedDate = new Date(today);
-let tasks = loadTasks();
+let tasks = readCalendarTasks(localStorage);
 let generatedMilestones = [];
+let currentRoadmapId = null;
+let completionByRoadmap = readCompletion(localStorage);
+let completedStageIds = new Set();
 
 const $ = (selector) => document.querySelector(selector);
 const planningForm = $("#planning-form");
@@ -140,14 +154,19 @@ function taskCategory(task) {
   return taskCategories[hash % taskCategories.length];
 }
 
-function loadTasks() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(TASK_STORAGE_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((task) => task && typeof task.title === "string" && /^\d{4}-\d{2}-\d{2}$/.test(task.deadline)) : [];
-  } catch { return []; }
+function saveTasks() { writeCalendarTasks(localStorage, tasks); }
+
+function saveStageCompletion() {
+  if (!currentRoadmapId) return;
+  completionByRoadmap[currentRoadmapId] = [...completedStageIds];
+  writeCompletion(localStorage, completionByRoadmap);
 }
 
-function saveTasks() { localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks)); }
+function randomId(prefix) {
+  return crypto.randomUUID
+    ? `${prefix}-${crypto.randomUUID()}`
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function applyLanguage(language) {
   currentLanguage = language;
@@ -165,6 +184,10 @@ function applyLanguage(language) {
   brief.placeholder = copy[language].briefPlaceholder;
   experience.placeholder = copy[language].experiencePlaceholder;
   $("#task-title").placeholder = copy[language].taskPlaceholder;
+  document.querySelector(".calendar-card").setAttribute("aria-label", copy[language].calendarAria);
+  document.querySelector(".calendar-controls").setAttribute("aria-label", copy[language].calendarControls);
+  $("#prev-month").setAttribute("aria-label", copy[language].previousMonth);
+  $("#next-month").setAttribute("aria-label", copy[language].nextMonth);
   const tutorialOptions = $("#tutorialLanguage").options;
   tutorialOptions[0].textContent = language === "vi" ? "Tiếng Anh" : "English";
   tutorialOptions[1].textContent = language === "vi" ? "Tiếng Việt" : "Vietnamese";
@@ -229,6 +252,9 @@ planningForm.addEventListener("submit", (event) => {
   event.preventDefault();
   updateFormState();
   if (generateButton.disabled) return;
+  currentRoadmapId = randomId("roadmap");
+  completedStageIds = new Set();
+  saveStageCompletion();
   renderRoadmap();
   syncRoadmapMilestones();
   results.hidden = false;
@@ -268,6 +294,41 @@ function appendFact(list, label, value, iconType) {
   list.append(wrap);
 }
 
+function setStageCompletion(stageId, done) {
+  if (!currentRoadmapId) return;
+  if (done) completedStageIds.add(stageId);
+  else completedStageIds.delete(stageId);
+  saveStageCompletion();
+  tasks = tasks.map((task) =>
+    task.source === "roadmap" &&
+    task.roadmapId === currentRoadmapId &&
+    task.stageId === stageId
+      ? { ...task, done }
+      : task,
+  );
+  saveTasks();
+  renderRoadmap();
+  renderCalendar();
+  renderTaskPanel();
+}
+
+function createCompletionControl(stageId, isComplete, label) {
+  const completionLabel = make("label", "completion-control");
+  const completionInput = make("input");
+  completionInput.type = "checkbox";
+  completionInput.checked = isComplete;
+  completionInput.dataset.testid = "stage-completion";
+  completionInput.addEventListener("change", () =>
+    setStageCompletion(stageId, completionInput.checked),
+  );
+  completionLabel.append(
+    completionInput,
+    make("span", "", "✓"),
+    document.createTextNode(label),
+  );
+  return completionLabel;
+}
+
 function renderRoadmap() {
   const c = copy[currentLanguage];
   const dueDate = dateFromKey(deadlineInput.value);
@@ -280,7 +341,12 @@ function renderRoadmap() {
   generatedMilestones = stages.map((stage, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() + Math.max(1, Math.round(totalDays * ratios[index])));
-    return { title: stage.title, deadline: dateKey(date > dueDate ? dueDate : date) };
+    return {
+      stageId: `stage-${index + 1}`,
+      title: stage.title,
+      deadline: dateKey(date > dueDate ? dueDate : date),
+      category: categoryForIndex(index),
+    };
   });
 
   results.replaceChildren();
@@ -310,19 +376,35 @@ function renderRoadmap() {
   const timeline = make("div", "timeline");
   timeline.setAttribute("aria-label", c.roadmapEyebrow);
   stages.forEach((stage, index) => {
-    const article = make("article", "stage-card");
+    const stageId = generatedMilestones[index].stageId;
+    const isComplete = completedStageIds.has(stageId);
+    const article = make(
+      "article",
+      `stage-card${isComplete ? " stage-card-collapsed is-complete" : ""}`,
+    );
     const rail = make("div", "stage-rail");
     rail.setAttribute("aria-hidden", "true");
     rail.append(make("span", "", pad(index + 1)));
+    if (isComplete) {
+      const collapsedContent = make("div", "stage-collapsed-content");
+      const collapsedTitle = make("div");
+      collapsedTitle.append(
+        make("p", "stage-kicker", `${c.stage} ${index + 1}`),
+        make("h3", "", stage.title),
+      );
+      collapsedContent.append(
+        collapsedTitle,
+        createCompletionControl(stageId, true, c.completed),
+      );
+      article.append(rail, collapsedContent);
+      timeline.append(article);
+      return;
+    }
     const content = make("div", "stage-content");
     const stageHeading = make("div", "stage-heading");
     const stageTitle = make("div");
     stageTitle.append(make("p", "stage-kicker", `${c.stage} ${index + 1}`), make("h3", "", stage.title));
-    const completionLabel = make("label", "completion-control");
-    const completionInput = make("input");
-    completionInput.type = "checkbox";
-    completionInput.dataset.testid = "stage-completion";
-    completionLabel.append(completionInput, make("span", "", "✓"), document.createTextNode(c.markComplete));
+    const completionLabel = createCompletionControl(stageId, false, c.markComplete);
     stageHeading.append(stageTitle, completionLabel);
     const goals = make("div", "stage-goal");
     const goal = make("div"); goal.append(make("strong", "", c.goal), make("p", "", stage.goal));
@@ -415,7 +497,11 @@ function resetPlanning() {
   results.hidden = true;
   results.replaceChildren();
   generatedMilestones = [];
-  tasks = tasks.filter((task) => task.source !== "roadmap");
+  tasks = removeRoadmapCalendarTasks(tasks);
+  if (currentRoadmapId) delete completionByRoadmap[currentRoadmapId];
+  currentRoadmapId = null;
+  completedStageIds = new Set();
+  writeCompletion(localStorage, completionByRoadmap);
   saveTasks();
   renderCalendar();
   renderTaskPanel();
@@ -424,18 +510,11 @@ function resetPlanning() {
 }
 
 function syncRoadmapMilestones() {
-  const knownStageTitles = new Set([...stageCopy.en, ...stageCopy.vi].map((stage) => stage.title));
-  tasks = tasks.filter((task) => task.source !== "roadmap" && !knownStageTitles.has(task.title));
-  generatedMilestones.forEach((milestone, index) => {
-    tasks.push({
-      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${index}-${Math.random()}`,
-      title: milestone.title,
-      deadline: milestone.deadline,
-      category: taskCategories[index % taskCategories.length],
-      source: "roadmap",
-      done: false,
-      createdAt: new Date().toISOString(),
-    });
+  if (!currentRoadmapId) return;
+  tasks = syncRoadmapCalendarTasks(tasks, {
+    roadmapId: currentRoadmapId,
+    milestones: generatedMilestones,
+    completedStageIds: [...completedStageIds],
   });
   saveTasks();
   renderCalendar();
@@ -470,7 +549,8 @@ function renderCalendar() {
     const dayTasks = tasks.filter((task) => task.deadline === key);
     const button = make("button", "calendar-day");
     button.type = "button"; button.dataset.date = key; button.setAttribute("role", "gridcell");
-    button.setAttribute("aria-label", `${longDate(day)}${dayTasks.length ? `, ${dayTasks.length} ${currentLanguage === "vi" ? "công việc" : "task"}` : ""}`);
+    const taskCountLabel = dayTasks.length === 1 ? c.taskSingular : c.taskPlural;
+    button.setAttribute("aria-label", `${longDate(day)}${dayTasks.length ? `, ${dayTasks.length} ${taskCountLabel}` : ""}`);
     if (day.getMonth() !== visibleMonth.getMonth()) button.classList.add("is-outside");
     if (sameDate(day, today)) { button.classList.add("is-today"); button.setAttribute("aria-current", "date"); }
     if (sameDate(day, selectedDate)) button.classList.add("is-selected");
@@ -490,6 +570,27 @@ function renderCalendar() {
   }
 }
 
+function setCalendarTaskCompletion(taskId, done) {
+  const task = tasks.find((candidate) => candidate.id === taskId);
+  if (!task) return;
+  tasks = tasks.map((candidate) =>
+    candidate.id === taskId ? { ...candidate, done } : candidate,
+  );
+  if (
+    task.source === "roadmap" &&
+    task.roadmapId === currentRoadmapId &&
+    task.stageId
+  ) {
+    if (done) completedStageIds.add(task.stageId);
+    else completedStageIds.delete(task.stageId);
+    saveStageCompletion();
+    if (!results.hidden) renderRoadmap();
+  }
+  saveTasks();
+  renderCalendar();
+  renderTaskPanel();
+}
+
 function renderTaskPanel() {
   const c = copy[currentLanguage];
   const key = dateKey(selectedDate);
@@ -501,12 +602,14 @@ function renderTaskPanel() {
   if (!selectedTasks.length) { taskListPanel.append(make("p", "empty-tasks", c.emptyTasks)); return; }
   selectedTasks.forEach((task) => {
     const item = make("article", `task-item task-color-${taskCategory(task)}${task.done ? " is-done" : ""}`);
+    item.dataset.source = task.source;
+    item.dataset.testid = "calendar-task";
     const checkbox = make("input"); checkbox.type = "checkbox"; checkbox.checked = Boolean(task.done);
     checkbox.setAttribute("aria-label", `${task.title}: ${c.complete}`);
-    checkbox.addEventListener("change", () => { task.done = checkbox.checked; saveTasks(); renderCalendar(); renderTaskPanel(); });
+    checkbox.addEventListener("change", () => setCalendarTaskCompletion(task.id, checkbox.checked));
     const taskCopy = make("div", "task-copy");
     taskCopy.append(make("strong", "", task.title), make("small", "", `${copy[currentLanguage].deadlineLabel}: ${new Intl.DateTimeFormat(locale(), { day: "numeric", month: "short" }).format(dateFromKey(task.deadline))}`));
-    const remove = make("button", "delete-task", "×"); remove.type = "button"; remove.setAttribute("aria-label", `Delete ${task.title}`);
+    const remove = make("button", "delete-task", "×"); remove.type = "button"; remove.setAttribute("aria-label", `${c.deleteTask}: ${task.title}`);
     remove.addEventListener("click", () => { tasks = tasks.filter((candidate) => candidate.id !== task.id); saveTasks(); renderCalendar(); renderTaskPanel(); });
     item.append(checkbox, taskCopy, remove); taskListPanel.append(item);
   });
@@ -516,8 +619,8 @@ taskForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const title = taskTitleInput.value.trim(); const deadline = taskDeadlineInput.value;
   if (!title || !deadline) return;
-  const category = taskCategories[tasks.filter((task) => task.source !== "roadmap").length % taskCategories.length];
-  tasks.push({ id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, title, deadline, category, done: false, createdAt: new Date().toISOString() });
+  const category = categoryForIndex(tasks.filter((task) => task.source === "manual").length);
+  tasks.push({ id: randomId("manual"), title, deadline, category, source: "manual", done: false, createdAt: new Date().toISOString() });
   saveTasks(); selectedDate = dateFromKey(deadline); visibleMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12); taskTitleInput.value = "";
   renderCalendar(); renderTaskPanel(); taskTitleInput.focus();
 });
