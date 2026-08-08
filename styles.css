@@ -215,6 +215,28 @@ body { overflow-x: clip; }
 .feasibility-card dd { font-size: 1.65rem; }
 .stage-kicker { font-size: 1.05rem; }
 .completion-control { font-size: 1.2rem; }
+.stage-card.is-complete {
+  border-color: #91a56f;
+  background: var(--green-soft);
+}
+.stage-card-collapsed { min-height: 104px; }
+.stage-card-collapsed .stage-rail { align-items: center; padding-top: 0; }
+.stage-collapsed-content {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 30px;
+}
+.stage-collapsed-content h3 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 1.55rem;
+  letter-spacing: -.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .stage-goal strong,
 .stage-lower h4 { font-size: 1.05rem; font-weight: 800; }
 .stage-goal p { font-size: 1.41rem; font-weight: 400; }
@@ -592,6 +614,8 @@ footer { font-size: 1.29rem; }
   .choice-card span { font-size: .98rem; }
   .results-summary { font-size: 1.18rem; }
   .stage-kicker { font-size: .92rem; }
+  .stage-collapsed-content { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .stage-collapsed-content h3 { white-space: normal; }
   .stage-goal strong,
   .stage-lower h4 { font-size: .95rem; }
   .stage-facts dt { font-size: 1rem; }
