@@ -150,7 +150,7 @@
 
         <section class="results-section" id="roadmap-results" aria-labelledby="roadmap-title" hidden></section>
 
-        <section class="calendar-section" id="calendar" aria-labelledby="calendar-title" data-testid="project-calendar">
+        <section class="calendar-section" id="calendar" aria-labelledby="calendar-title">
           <div class="calendar-heading">
             <div><p class="eyebrow" data-i18n="calendarEyebrow">Your project garden</p><h2 id="calendar-title" data-i18n="calendarTitle">Keep every deadline in view.</h2></div>
             <p data-i18n="calendarIntro">Select a day, add a task, and let the month hold the details. Everything is saved on this device.</p>
@@ -175,7 +175,7 @@
                 <form class="task-form" id="task-form">
                   <label><span data-i18n="taskLabel">Task</span><input id="task-title" type="text" maxlength="90" required placeholder="What needs to get done?" autocomplete="off" /></label>
                   <label><span data-i18n="deadlineLabel">Deadline</span><input id="task-deadline" type="date" required /></label>
-                  <button class="button button-green" data-testid="calendar-add-task" type="submit"><span data-i18n="addCalendar">Add to calendar</span><span aria-hidden="true">＋</span></button>
+                  <button class="button button-green" type="submit"><span data-i18n="addCalendar">Add to calendar</span><span aria-hidden="true">＋</span></button>
                 </form>
                 <div class="task-list-panel" id="task-list"></div>
               </aside>

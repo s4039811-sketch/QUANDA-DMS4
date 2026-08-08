@@ -9,11 +9,7 @@
   "scripts": {
     "dev": "node scripts/sync-static.mjs && vinext dev",
     "build": "node scripts/sync-static.mjs && vinext build",
-    "start": "vinext start",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint app.js calendar.js scripts/sync-static.mjs tests/**/*.mjs playwright.config.mjs",
-    "test": "node --test tests/calendar.test.mjs",
-    "test:e2e": "playwright test"
+    "start": "vinext start"
   },
   "dependencies": {
     "next": "16.2.6",
@@ -22,14 +18,11 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "5.20260727.1",
-    "@playwright/test": "1.62.0",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
-    "eslint": "9.39.4",
     "react-server-dom-webpack": "19.2.6",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
